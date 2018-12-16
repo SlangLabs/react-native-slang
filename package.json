@@ -1,0 +1,18 @@
+
+{
+  "name": "react-native-slang",
+  "version": "1.0.0",
+  "description": "React native interface for Slang",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "react-native"
+  ],
+  "author": "Slang Labs",
+  "license": "",
+  "peerDependencies": {
+    "react-native": "^0.57.7"
+  }
+}
