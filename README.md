@@ -43,9 +43,11 @@
 
 ## Usage
 ```javascript
-import RNSlang from 'react-native-slang';
+import {NativeModules} from 'react-native';
+
+const {SlangBuddy} = NativeModules;
 
 // TODO: What to do with the module?
-RNSlang;
+SlangBuddy;
 ```
   
