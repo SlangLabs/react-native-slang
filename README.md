@@ -1,10 +1,12 @@
 # react-native-slang
 
+Slang integration for React Native Apps built for Android.
+
 ## Getting started
 
 `$ npm install react-native-slang --save`
 
-### Mostly automatic installation
+### Automatic installation
 
 `$ react-native link react-native-slang`
 
@@ -18,36 +20,35 @@
 2. Append the following lines to `android/settings.gradle`:
   	```
   	include ':react-native-slang'
-  	project(':react-native-slang').projectDir = new File(rootProject.projectDir, 	'../node_modules/react-native-slang/android')
+  	project(':react-native-slang').projectDir = file('../node_modules/react-native-slang/android')
   	```
 3. Insert the following lines inside the dependencies block in `android/app/build.gradle`:
   	```
-      compile project(':react-native-slang')
+      implementation project(':react-native-slang')
   	```
-
-#### iOS (not supported currently)
-
-1. In XCode, in the project navigator, right click `Libraries` ➜ `Add Files to [your project's name]`
-2. Go to `node_modules` ➜ `react-native-slang` and add `RNSlang.xcodeproj`
-3. In XCode, in the project navigator, select your project. Add `libRNSlang.a` to your project's `Build Phases` ➜ `Link Binary With Libraries`
-4. Run your project (`Cmd+R`)<
-
-#### Windows (not supported currently)
-[Read it! :D](https://github.com/ReactWindows/react-native)
-
-1. In Visual Studio add the `RNSlang.sln` in `node_modules/react-native-slang/windows/RNSlang.sln` folder to their solution, reference from their app.
-2. Open up your `MainPage.cs` app
-  - Add `using Slang.RNSlang;` to the usings at the top of the file
-  - Add `new RNSlangPackage()` to the `List<IReactPackage>` returned by the `Packages` method
 
 
 ## Usage
+
 ```javascript
-import {NativeModules} from 'react-native';
+import { Slang } from 'react-native-slang';
 
-const {SlangBuddy} = NativeModules;
+// Initialize slang
+Slang.initialize(
+      "<your buddy id>", 
+      "<your api key>", 
+      { 
+        "locale": "LOCALE_ENGLISH_IN", // Other possible values: LOCALE_HINDI_IN, LOCALE_ENGLISH_US
+        "position": "CENTER_BOTTOM", // Other possible values: LEFT_TOP, CENTER_TOP, RIGHT_TOP, CENTER, LEFT_BOTTOM, RIGHT_BOTTOM etc. 
+      }, 
+      () => { console.log("Slang initialized successfully") });
 
-// TODO: What to do with the module?
-SlangBuddy;
+// Listen to slang intent actions. 
+Slang.setIntentActionListener((action) => {
+  console.log(action);
+  Slang.notifyActionCompleted(true);
+});
 ```
+
+Go to https://docs.slanglabs.in/slang/ to know more about configuration. 
   

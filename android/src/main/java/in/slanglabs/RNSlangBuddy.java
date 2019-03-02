@@ -1,50 +1,42 @@
 
 package in.slanglabs;
 
-import android.content.Context;
-import android.os.Handler;
 import android.util.Log;
-import android.widget.Toast;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
 import com.facebook.react.bridge.ReactMethod;
 import com.facebook.react.bridge.Callback;
-import com.facebook.react.bridge.WritableArray;
+import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableMap;
 import com.facebook.react.modules.core.DeviceEventManagerModule;
-import com.slanglabs.slang.internal.util.SLog;
-import com.slanglabs.slang.internal.util.SlangUIUtil;
 
-import java.util.ArrayList;
+import java.util.Locale;
 
-import in.slanglabs.platform.application.ISlangApplicationStateListener;
-import in.slanglabs.platform.application.SlangApplication;
-import in.slanglabs.platform.application.SlangApplicationUninitializedException;
-import in.slanglabs.platform.application.SlangIntentDescriptor;
-import in.slanglabs.platform.application.SlangLocaleException;
-import in.slanglabs.platform.application.actions.ISlangResolvedIntentAction;
-import in.slanglabs.platform.session.SlangEntity;
-import in.slanglabs.platform.session.SlangIntent;
-import in.slanglabs.platform.session.SlangResolvedIntent;
-import in.slanglabs.platform.session.SlangSession;
-import in.slanglabs.platform.ui.SlangUI;
+import in.slanglabs.platform.SlangBuddy;
+import in.slanglabs.platform.SlangBuddyOptions;
+import in.slanglabs.platform.SlangEntity;
+import in.slanglabs.platform.SlangIntent;
+import in.slanglabs.platform.SlangLocale;
+import in.slanglabs.platform.SlangSession;
+import in.slanglabs.platform.action.SlangAction;
+import in.slanglabs.platform.action.SlangIntentAction;
+import in.slanglabs.platform.ui.SlangBuiltinUI;
 
 public class RNSlangBuddy extends ReactContextBaseJavaModule {
 
     private static final String TAG = "RNSlangBuddy";
-    private final ReactApplicationContext reactContext;
-    private SlangResolvedIntent mCurrentIntent;
-    private SlangEntity mCurrentEntity;
-    private SlangEntity mUnresolvedEntity;
-    private SlangEntity mResolvedEntity;
-    private boolean mInitialized;
+
+    // Config constants
+    private static final String CONFIG_LOCALE = "locale";
+    private static final String CONFIG_POSITION = "position";
+
     private SlangSession mCurrentSession;
+    private ReadableMap mConfigOptions;
 
     public RNSlangBuddy(ReactApplicationContext reactContext) {
         super(reactContext);
-        this.reactContext = reactContext;
     }
 
     @Override
@@ -54,283 +46,171 @@ public class RNSlangBuddy extends ReactContextBaseJavaModule {
 
     /**
      * Initialize Slang
-     * @param appKey
-     * @param authKey
-     * @param successCallback
-     * @param errorCallback
+     * @param buddyId
+     * @param apiKey
+     * @param configOptions
+     * @param buddyListener
      */
     @ReactMethod
     public void initialize(
-        String appKey,
-        String authKey,
-        final Callback successCallback,
-        final Callback errorCallback
-    ) {
-        // Initialize slang here
-        final Context appContext = reactContext.getApplicationContext();
+        String buddyId,
+        String apiKey,
+        ReadableMap configOptions,
+        final Callback buddyListener) {
 
+        // Config options
+        mConfigOptions = configOptions;
+
+        // Initialize SlangBuddy
         try {
-            SlangApplication.initialize(
-                appContext,
-                appKey,
-                authKey,
-                SlangApplication.getSupportedLocales(),
-                SlangApplication.LOCALE_ENGLISH_IN,
-                new ISlangApplicationStateListener() {
-                    @Override
-                    public void onInitialized() {
-                        mInitialized = true;
-                        Toast.makeText(
-                            appContext,
-                            "Slang initialized",
-                            Toast.LENGTH_LONG
-                        );
-                        registerHandlers();
-                        if (successCallback != null) {
-                            successCallback.invoke();
-                        }
-                    }
-
-                    @Override
-                    public void onInitializationFailed(FailureReason failureReason) {
-                        mInitialized = true;
-                        Toast.makeText(
-                            appContext,
-                            "Could not initialize slang!",
-                            Toast.LENGTH_LONG
-                        );
-                        if (errorCallback != null) {
-                            errorCallback.invoke(failureReason.toString());
-                        }
-                    }
-                }
-            );
-        } catch (SlangLocaleException e) {
-        }
-    }
-
-    /**
-     * Inform Slang about the value of the given entity
-     * @param entity
-     * @param value
-     */
-    @ReactMethod
-    public void setEntity(String entity, String value) {
-        // First try and resolve using the currently active unresolved entity object
-        if (mUnresolvedEntity != null && mUnresolvedEntity.getName().equals(entity)) {
-            mUnresolvedEntity.resolve(value);
-        } else if (mResolvedEntity != null && mResolvedEntity.getName().equals(entity)) {
-            mResolvedEntity.resolve(value);
-        } else if (mCurrentIntent != null && mCurrentIntent.getEntity(entity) != null) {
-            mCurrentIntent.getEntity(entity).resolve(value);
-        }
-    }
-
-    /**
-     * Inform Slang to continue the lifecyle
-     */
-    @ReactMethod
-    public void continueSession() {
-        if (mCurrentSession != null) {
-            mCurrentSession.success();
-        }
-    }
-
-    /**
-     * Inform Slang to abort the lifecycle
-     */
-    @ReactMethod
-    public void failSession() {
-        if (mCurrentSession != null) {
-            mCurrentSession.failure();
-        }
-    }
-
-    public void registerHandlers() {
-        try {
-            for (SlangIntentDescriptor intent : SlangApplication.getIntentDescriptors()) {
-                registerHandler(intent.getName());
-            }
-        } catch (Exception e) {
-            // handle the exception
-            Toast.makeText(
-                reactContext.getApplicationContext(),
-                "Error registering handler - " + e.getLocalizedMessage(),
-                Toast.LENGTH_LONG
-            );
-        }
-    }
-
-    public void registerHandler(
-        String intent
-    ) {
-        try {
-            SlangApplication.getIntentDescriptor(intent).setResolutionAction(new ISlangResolvedIntentAction() {
-                @Override
-                public SlangSession.Status onIntentResolutionBegin(SlangResolvedIntent slangResolvedIntent, SlangSession slangSession) {
-                    setCurrentIntent(slangResolvedIntent);
-                    setCurrentSession(slangSession);
-                    WritableMap params = getMapFromIntentAndEnity(
-                        "intentResolutionBegin",
-                        slangResolvedIntent,
-                        null,
-                        null
-                    );
-                    sendEvent(slangResolvedIntent.getName(), params);
-                    return slangSession.suspend();
-                }
-
-                @Override
-                public SlangSession.Status onEntityUnresolved(final SlangEntity slangEntity, SlangSession slangSession) {
-                    Log.d("SlangRegisterHandler", "onEntityUnresolved called - " + slangEntity.getName());
-
-                    setCurrentUnresolvedEntity(slangEntity);
-                    WritableMap params = getMapFromIntentAndEnity(
-                        "unresolvedEntity",
-                        slangEntity.getParent(),
-                        slangEntity,
-                        null
-                    );
-                    sendEvent(slangEntity.getParent().getName(), params);
-                    return slangSession.suspend();
-                }
-
-                @Override
-                public SlangSession.Status onEntityResolved(final SlangEntity slangEntity, SlangSession slangSession) {
-                    Log.d("SlangRegisterHandler", "onEntityResolved called - " + slangEntity.getName());
-                    /* TODO:T366 The suspend and success semantics does not seem to work well
-                       for this callback. So until that is fixed, we will not be able to handle
-                       this method inside RN
-
-                    setCurrentResolvedEntity(slangEntity);
-                    WritableMap params = getMapFromIntentAndEnity(
-                        "resolvedEntity",
-                        slangEntity.getParent(),
-                        slangEntity,
-                        null
-                    );
-                    sendEvent(slangEntity.getParent().getName(), params);
-                    */
-                    return slangSession.success();
-                }
-
-                @Override
-                public SlangSession.Status action(final SlangResolvedIntent slangResolvedIntent, SlangSession slangSession) {
-                    WritableMap params = getMapFromIntentAndEnity(
-                        "action",
-                        slangResolvedIntent,
-                        null,
-                        null
-                    );
-                    sendEvent(slangResolvedIntent.getName(), params);
-                    return slangSession.suspend();
-                }
-
-                @Override
-                public SlangSession.Status onIntentResolutionEnd(SlangResolvedIntent slangResolvedIntent, SlangSession slangSession) {
-                    WritableMap params = getMapFromIntentAndEnity(
-                        "intentResolutionEnd",
-                        slangResolvedIntent,
-                        null,
-                        null
-                    );
-                    sendEvent(slangResolvedIntent.getName(), params);
-                    return slangSession.suspend();
-                }
-            });
-        } catch (SlangApplicationUninitializedException e) {
+            SlangBuddyOptions options = new SlangBuddyOptions.Builder()
+                    .setContext(getReactApplicationContext().getApplicationContext())
+                    .setBuddyId(buddyId)
+                    .setAPIKey(apiKey)
+                    .setListener(new RNSlangBuddyListener(buddyListener, getSlangUiPosition()))
+                    .setIntentAction(new RNSlangAction(getReactApplicationContext()))
+                    .setRequestedLocales(SlangLocale.getSupportedLocales())
+                    .setDefaultLocale(RNSlangLocaleMap.getSlangLocale(getStringConfig(CONFIG_LOCALE)))
+                    .build();
+            SlangBuddy.initialize(options);
+            Log.d(TAG, "initialize: called: buddyId:" + buddyId + " apiKey:" + apiKey);
+        } catch (SlangBuddyOptions.InvalidOptionException e) {
+            Log.d(TAG, "initialize: InvalidOptionException");
+            e.printStackTrace();
+        } catch (SlangBuddy.InsufficientPrivilegeException e) {
+            Log.d(TAG, "initialize: InsufficientPrivilegeException");
             e.printStackTrace();
         }
     }
 
-    private WritableMap getMapFromIntentAndEnity(
-        String eventType,
-        SlangResolvedIntent intent,
-        SlangEntity unresolvedEntity,
-        SlangEntity resolvedEntity
-    ) {
-        WritableMap params = Arguments.createMap();
+    /**
+     *  Returns string configuration for the key passed in {@link #initialize(String, String, ReadableMap, Callback)} method
+     *
+     * @param key
+     *          Configuration key
+     * @returns
+     *          Value corresponding to {@param key}
+     */
+    private String getStringConfig(String key) {
+        if (mConfigOptions == null) {
+            return null;
+        }
+        return mConfigOptions.getString(key);
+    }
 
-        params.putString("eventType", eventType);
-        if (intent != null) {
-            WritableMap intentMap = Arguments.createMap();
+    private SlangBuiltinUI.SlangUIPosition getSlangUiPosition() {
+        SlangBuiltinUI.SlangUIPosition position = null;
+        String configPosition = getStringConfig(CONFIG_POSITION);
+        if (position != null) {
+            return SlangBuiltinUI.SlangUIPosition.valueOf(configPosition);
+        } else {
+            return SlangBuiltinUI.SlangUIPosition.CENTER_BOTTOM;
+        }
+    }
 
-            intentMap.putString("name", intent.getName());
-            intentMap.putString("userUtterance", intent.getUserUtterance());
-            intentMap.putString("completionStatement_affirmative", intent.getCompletionStatement().getAffirmative());
-            intentMap.putString("completionStatement_negative", intent.getCompletionStatement().getNegative());
+    /**
+     * Notify Slang of a action's success/failure status for Slang to show completion statement
+     *
+     * @param isActionResolutionSuccess
+     */
+    @ReactMethod
+    public void notifyActionCompleted(boolean isActionResolutionSuccess) {
+        if (mCurrentSession != null) {
+            mCurrentSession.notifyActionCompleted(isActionResolutionSuccess ? SlangAction.Status.SUCCESS : SlangAction.Status.FAILURE);
+        }
+    }
 
-            params.putMap("intent", intentMap);
+    private static class RNSlangBuddyListener implements SlangBuddy.Listener {
 
-            // Get all the entities for this intent
+        private Callback mBuddyListener;
+        private SlangBuiltinUI.SlangUIPosition mPosition;
 
-            WritableMap entitiesMap = Arguments.createMap();
+        public RNSlangBuddyListener(Callback rnBuddyListener, SlangBuiltinUI.SlangUIPosition position) {
+            mBuddyListener = rnBuddyListener;
+            mPosition = position;
+        }
 
-            for (SlangEntity entity : intent.getEntities()) {
-                WritableMap entityMap = Arguments.createMap();
-                entityMap.putString("name", entity.getName());
-                entityMap.putString("value", entity.getValue());
-                if (entity.getPrompt() != null) {
-                    entityMap.putString("prompt_affirmative", entity.getPrompt().getAffirmative());
-                    entityMap.putString("prompt_negative", entity.getPrompt().getNegative());
+        @Override
+        public void onInitialized() {
+            Log.d(TAG, "onInitialized: Success");
+            try {
+                SlangBuddy.getBuiltinUI().setPosition(mPosition);
+            } catch (SlangBuddy.UninitializedUsageException e) {
+                e.printStackTrace();
+                // TODO: Emit failure events to notify the bridge
+            }
+            mBuddyListener.invoke();
+        }
+
+        @Override
+        public void onInitializationFailed(SlangBuddy.InitializationError initializationError) {
+            Log.d(TAG, "onInitializationFailed: Failed");
+        }
+
+        @Override
+        public void onLocaleChanged(Locale locale) {
+            // TODO Emit an event to let the bridge know
+        }
+
+        @Override
+        public void onLocaleChangeFailed(Locale locale, SlangBuddy.LocaleChangeError localeChangeError) {
+            // TODO Emit an event to let the bridge know
+        }
+    }
+
+    private class RNSlangAction implements SlangIntentAction {
+
+        private final ReactApplicationContext mReactContext;
+
+        private RNSlangAction(ReactApplicationContext mReactContext) {
+            this.mReactContext = mReactContext;
+        }
+
+        @Override
+        public Status action(SlangIntent slangIntent, SlangSession slangSession) {
+            mCurrentSession = slangSession;
+            WritableMap map = getMapFromIntentAndEntity(slangIntent);
+            sendEvent(map);
+            return Status.SUCCESS;
+        }
+
+        // TODO: Revisit and separate out the data transformation to separate class as this shouldn't change in subsequent versions
+        private WritableMap getMapFromIntentAndEntity(SlangIntent intent) {
+            WritableMap params = Arguments.createMap();
+            if (intent != null) {
+                WritableMap intentMap = Arguments.createMap();
+
+                intentMap.putString("name", intent.getName());
+                intentMap.putString("userUtterance", intent.getUserUtterance());
+                intentMap.putString("completionStatement_affirmative", intent.getCompletionStatement().getAffirmative());
+                intentMap.putString("completionStatement_negative", intent.getCompletionStatement().getNegative());
+
+                params.putMap("intent", intentMap);
+
+                // Get all the entities for this intent
+                WritableMap entitiesMap = Arguments.createMap();
+                for (SlangEntity entity : intent.getEntities()) {
+                    WritableMap entityMap = Arguments.createMap();
+                    entityMap.putString("name", entity.getName());
+                    entityMap.putString("value", entity.getValue());
+                    entityMap.putString("type", entity.getType().getName());
+                    if (entity.getPrompt() != null) {
+                        entityMap.putString("prompt_affirmative", entity.getPrompt().getAffirmative());
+                        entityMap.putString("prompt_negative", entity.getPrompt().getNegative());
+                    }
+
+                    entitiesMap.putMap(entity.getName(), entityMap);
                 }
 
-                entitiesMap.putMap(entity.getName(), entityMap);
+                params.putMap("entities", entitiesMap);
             }
 
-            params.putMap("entities", entitiesMap);
+            return params;
         }
 
-        if (resolvedEntity != null) {
-            WritableMap entityMap = Arguments.createMap();
-
-            entityMap.putString("name", resolvedEntity.getName());
-            entityMap.putString("value", resolvedEntity.getValue());
-            if (resolvedEntity.getPrompt() != null) {
-                entityMap.putString("prompt_affirmative", resolvedEntity.getPrompt().getAffirmative());
-                entityMap.putString("prompt_negative", resolvedEntity.getPrompt().getNegative());
-            }
-
-            params.putMap("resolvedEntity", entityMap);
+        private void sendEvent(WritableMap params) {
+            mReactContext.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
+                    .emit("slang_action", params);
         }
-
-        if (unresolvedEntity != null) {
-            WritableMap entityMap = Arguments.createMap();
-
-            entityMap.putString("name", unresolvedEntity.getName());
-            entityMap.putString("value", unresolvedEntity.getValue());
-            if (unresolvedEntity.getPrompt() != null) {
-                params.putString("prompt_affirmative", unresolvedEntity.getPrompt().getAffirmative());
-                params.putString("prompt_negative", unresolvedEntity.getPrompt().getNegative());
-            }
-
-
-            params.putMap("unresolvedEntity", entityMap);
-        }
-
-        return params;
-    }
-
-    private void setCurrentSession(SlangSession session) {
-        mCurrentSession = session;
-    }
-
-    private void setCurrentIntent(SlangResolvedIntent intent) {
-        mCurrentIntent = intent;
-    }
-
-    private void setCurrentUnresolvedEntity(SlangEntity entity) {
-        mUnresolvedEntity = entity;
-    }
-
-    private void setCurrentResolvedEntity(SlangEntity entity) {
-        mResolvedEntity = entity;
-    }
-
-    private void sendEvent(String event, WritableMap params) {
-        this.reactContext
-            .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter.class)
-            .emit(event, params);
-        // TODO: Make this method sync.
     }
 }
